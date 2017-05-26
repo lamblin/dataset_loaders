@@ -31,6 +31,9 @@ class Polyps912Dataset(ThreadedDataset):
     which_set: string
         A string in ['train', 'val', 'valid', 'test'], corresponding to
         the set to be returned.
+    preload: bool
+        Whether to preload all the images in memory (as a list of
+        ndarrays) to minimize disk access.
 
      References
     ----------
@@ -75,7 +78,7 @@ class Polyps912Dataset(ThreadedDataset):
             self._filenames = filenames
         return self._filenames
 
-    def __init__(self, which_set='train', *args, **kwargs):
+    def __init__(self, which_set='train', preload=False, *args, **kwargs):
 
         # Put which_set in canonical form: training, validation or testing
         if which_set in ("train", "training"):
@@ -87,11 +90,45 @@ class Polyps912Dataset(ThreadedDataset):
         else:
             raise ValueError("Unknown set requested: %s" % which_set)
 
+        self.preload = preload
+
         # Define the images and mask paths
         self.image_path = os.path.join(self.path, self.which_set, 'images')
         self.mask_path = os.path.join(self.path, self.which_set, 'masks2')
 
+        if self.preload:
+            self._preload_data()
+
         super(Polyps912Dataset, self).__init__(*args, **kwargs)
+
+    def _preload_data(self):
+        """Preload all data in memory.
+
+        The images will be stored as a list of ndarrays in self.image,
+        the masks will be in self.mask, in the same order as
+        self.filename.
+        In addition, self.image_name_to_idx will contain a dictionary
+        mapping the root of the image name to its index.
+        """
+        from skimage import io
+        image_all = []
+        mask_all = []
+        image_name_to_idx = {}
+        for idx, img_name in enumerate(self.filenames):
+            image_name_to_idx[img_name] = idx
+            img = io.imread(os.path.join(self.image_path, img_name + ".bmp"))
+            img = img.astype(floatX) / 255.
+
+            mask = np.array(io.imread(os.path.join(self.mask_path,
+                                                   img_name + ".tif")),
+                            dtype='int32')
+
+            image_all.append(img)
+            mask_all.append(mask)
+
+        self.image = image_all
+        self.mask = mask_all
+        self.image_name_to_idx = image_name_to_idx
 
     def get_names(self):
         """Return a dict of names, per prefix/subset."""
@@ -108,20 +145,26 @@ class Polyps912Dataset(ThreadedDataset):
         """
         from skimage import io
         image_batch, mask_batch, filename_batch = [], [], []
+        if self.preload:
+            for prefix, img_name in sequence:
+                idx = self.image_name_to_idx[img_name]
+                image_batch.append(self.image[idx])
+                mask_batch.append(self.mask[idx])
+                filename_batch.append(img_name)
+        else:
+            for prefix, img_name in sequence:
 
-        for prefix, img_name in sequence:
+                img = io.imread(os.path.join(self.image_path, img_name + ".bmp"))
+                img = img.astype(floatX) / 255.
 
-            img = io.imread(os.path.join(self.image_path, img_name + ".bmp"))
-            img = img.astype(floatX) / 255.
+                mask = np.array(io.imread(os.path.join(self.mask_path,
+                                                       img_name + ".tif")))
+                mask = mask.astype('int32')
 
-            mask = np.array(io.imread(os.path.join(self.mask_path,
-                                                   img_name + ".tif")))
-            mask = mask.astype('int32')
-
-            # Add to minibatch
-            image_batch.append(img)
-            mask_batch.append(mask)
-            filename_batch.append(img_name)
+                # Add to minibatch
+                image_batch.append(img)
+                mask_batch.append(mask)
+                filename_batch.append(img_name)
 
         ret = {}
         ret['data'] = np.array(image_batch)
