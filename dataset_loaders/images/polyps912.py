@@ -101,6 +101,30 @@ class Polyps912Dataset(ThreadedDataset):
 
         super(Polyps912Dataset, self).__init__(*args, **kwargs)
 
+    def _load_image(image_batch, mask_batch, img_name, prefix=None):
+        """Load one image and append the data to image/mask_batch
+
+        Parameters
+        ----------
+            image_batch: list
+                The new image data will be appended to that argument.
+            mask_batch: list
+                The new mask data will be appended to that argument.
+            img_name: string
+                Name of the new image to load.
+            prefix: string (optional)
+                Prefix for the new image to load.
+        """
+        from skimage import io
+        img = io.imread(os.path.join(self.image_path, img_name + ".bmp"))
+        img = img.astype(floatX) / 255.
+        mask = np.array(io.imread(os.path.join(self.mask_path,
+                                               img_name + ".tif")),
+                        dtype='int32')
+
+        image_batch.append(img)
+        mask_batch.append(mask)
+
     def _preload_data(self):
         """Preload all data in memory.
 
@@ -110,25 +134,12 @@ class Polyps912Dataset(ThreadedDataset):
         In addition, self.image_name_to_idx will contain a dictionary
         mapping the root of the image name to its index.
         """
-        from skimage import io
-        image_all = []
-        mask_all = []
-        image_name_to_idx = {}
+        self.image_all = []
+        self.mask_all = []
+        self.image_name_to_idx = {}
         for idx, img_name in enumerate(self.filenames):
-            image_name_to_idx[img_name] = idx
-            img = io.imread(os.path.join(self.image_path, img_name + ".bmp"))
-            img = img.astype(floatX) / 255.
-
-            mask = np.array(io.imread(os.path.join(self.mask_path,
-                                                   img_name + ".tif")),
-                            dtype='int32')
-
-            image_all.append(img)
-            mask_all.append(mask)
-
-        self.image = image_all
-        self.mask = mask_all
-        self.image_name_to_idx = image_name_to_idx
+            self._load_image(self.image_all, self.mask_all, img_name)
+            self.image_name_to_idx[img_name] = idx
 
     def get_names(self):
         """Return a dict of names, per prefix/subset."""
@@ -143,7 +154,6 @@ class Polyps912Dataset(ThreadedDataset):
         labels, their subset (i.e. category, clip, prefix) and their
         filenames.
         """
-        from skimage import io
         image_batch, mask_batch, filename_batch = [], [], []
         if self.preload:
             for prefix, img_name in sequence:
@@ -153,18 +163,7 @@ class Polyps912Dataset(ThreadedDataset):
                 filename_batch.append(img_name)
         else:
             for prefix, img_name in sequence:
-
-                img = io.imread(os.path.join(self.image_path, img_name + ".bmp"))
-                img = img.astype(floatX) / 255.
-
-                mask = np.array(io.imread(os.path.join(self.mask_path,
-                                                       img_name + ".tif")))
-                mask = mask.astype('int32')
-
-                # Add to minibatch
-                image_batch.append(img)
-                mask_batch.append(mask)
-                filename_batch.append(img_name)
+                self._load_image(image_batch, mask_batch, img_name, prefix)
 
         ret = {}
         ret['data'] = np.array(image_batch)
