@@ -46,9 +46,9 @@ class Polyps912Dataset(ThreadedDataset):
 
     # optional arguments
     _cmap = {
-        0: (0, 0, 0),       # Background
-        1: (255, 255, 255), # Polyp
-        2: (128, 128, 128), # Void
+        0: (0, 0, 0),        # Background
+        1: (255, 255, 255),  # Polyp
+        2: (128, 128, 128),  # Void
         }
     _mask_labels = {0: 'Background', 1: 'Polyp', 2: 'Void'}
 
@@ -101,7 +101,7 @@ class Polyps912Dataset(ThreadedDataset):
 
         super(Polyps912Dataset, self).__init__(*args, **kwargs)
 
-    def _load_image(image_batch, mask_batch, img_name, prefix=None):
+    def _load_image(self, image_batch, mask_batch, img_name, prefix=None):
         """Load one image and append the data to image/mask_batch
 
         Parameters
@@ -128,8 +128,8 @@ class Polyps912Dataset(ThreadedDataset):
     def _preload_data(self):
         """Preload all data in memory.
 
-        The images will be stored as a list of ndarrays in self.image,
-        the masks will be in self.mask, in the same order as
+        The images will be stored as a list of ndarrays in self.image_all,
+        the masks will be in self.mask_all, in the same order as
         self.filename.
         In addition, self.image_name_to_idx will contain a dictionary
         mapping the root of the image name to its index.
@@ -158,12 +158,13 @@ class Polyps912Dataset(ThreadedDataset):
         if self.preload:
             for prefix, img_name in sequence:
                 idx = self.image_name_to_idx[img_name]
-                image_batch.append(self.image[idx])
-                mask_batch.append(self.mask[idx])
+                image_batch.append(self.image_all[idx])
+                mask_batch.append(self.mask_all[idx])
                 filename_batch.append(img_name)
         else:
             for prefix, img_name in sequence:
                 self._load_image(image_batch, mask_batch, img_name, prefix)
+                filename_batch.append(img_name)
 
         ret = {}
         ret['data'] = np.array(image_batch)
