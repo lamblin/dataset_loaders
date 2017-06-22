@@ -174,7 +174,18 @@ class Polyps912Dataset(ThreadedDataset):
         return ret
 
 
-def test():
+def test(preload=False):
+    # Instrument Polyps912Dataset._load_image to count its calls
+    orig_load_image = Polyps912Dataset._load_image
+
+    def _load_image(*args, **kwargs):
+        _load_image.count += 1
+        return orig_load_image(*args, **kwargs)
+    _load_image.count = 0
+
+    Polyps912Dataset._load_image = _load_image
+
+    start_build = time.time()
     trainiter = Polyps912Dataset(
         which_set='train',
         batch_size=10,
@@ -185,7 +196,8 @@ def test():
         return_one_hot=True,
         return_01c=True,
         return_list=True,
-        use_threads=False)
+        use_threads=False,
+        preload=preload)
 
     validiter = Polyps912Dataset(
         which_set='valid',
@@ -195,7 +207,8 @@ def test():
         return_one_hot=True,
         return_01c=True,
         return_list=True,
-        use_threads=False)
+        use_threads=False,
+        preload=preload)
 
     testiter = Polyps912Dataset(
         which_set='test',
@@ -205,7 +218,8 @@ def test():
         return_one_hot=True,
         return_01c=True,
         return_list=True,
-        use_threads=False)
+        use_threads=False,
+        preload=preload)
 
     # Get number of classes
     nclasses = trainiter.nclasses
@@ -235,6 +249,9 @@ def test():
         test_nsamples, test_batch_size, test_nbatches))
 
     start = time.time()
+    print("Time to build{} the datasets: {}".format(
+        " and preload" if preload else "",
+        start - start_build))
     tot = 0
     max_epochs = 1
 
@@ -262,9 +279,17 @@ def test():
             tot += part
             print("Minibatch %s time: %s (%s)" % (str(mb), part, tot))
 
+    if preload:
+        expected_count = train_nsamples + valid_nsamples + test_nsamples
+    else:
+        expected_count = train_nsamples * max_epochs
+    assert _load_image.count == expected_count, (
+            _load_image.count, expected_count)
+
 
 def run_tests():
-    test()
+    for preload in (False, True):
+        test(preload)
 
 
 if __name__ == '__main__':
